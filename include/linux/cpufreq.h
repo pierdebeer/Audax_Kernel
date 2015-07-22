@@ -478,6 +478,9 @@ extern struct cpufreq_governor cpufreq_gov_yankactive;
 #elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_ZZMOOVE)
 extern struct cpufreq_governor cpufreq_gov_zzmoove;
 #define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_zzmoove)
+#elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_ARTERACTIVE)
+extern struct cpufreq_governor cpufreq_gov_arteractive;
+#define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_arteractive)
 #endif
 
 
