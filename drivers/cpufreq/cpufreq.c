@@ -29,6 +29,7 @@
 #include <linux/completion.h>
 #include <linux/mutex.h>
 #include <linux/syscore_ops.h>
+#include <linux/sched.h>
 
 #include <trace/events/power.h>
 
@@ -407,10 +408,20 @@ static ssize_t show_##file_name				\
 }
 
 show_one(cpuinfo_min_freq, cpuinfo.min_freq);
-show_one(cpuinfo_max_freq, cpuinfo.max_freq);
 show_one(cpuinfo_transition_latency, cpuinfo.transition_latency);
 show_one(scaling_min_freq, min);
 show_one(scaling_max_freq, max);
+
+static ssize_t show_cpuinfo_max_freq(struct cpufreq_policy *policy, char *buf)
+{
+	unsigned int newfreq = 0;
+	if (!strcmp(current->comm, "thermal-engine")) {
+		newfreq = max(policy->max, (unsigned int)2265600);
+		pr_info("[imoseyon] thermal-engine read maxfreq %d!\n", newfreq);
+	} else newfreq = policy->cpuinfo.max_freq;
+	return sprintf(buf, "%u\n", newfreq);
+}
+
 show_one(cpu_utilization, util);
 #ifdef CONFIG_SEC_PM
 show_one(cpu_load, load_at_max);
@@ -468,7 +479,44 @@ static ssize_t store_##file_name					\
 #endif
 #endif
 
-store_one(scaling_max_freq, max);
+static ssize_t store_scaling_max_freq
+        (struct cpufreq_policy *policy, const char *buf, size_t count)
+{
+        unsigned int ret = -EINVAL;
+        struct cpufreq_policy new_policy;
+
+        ret = cpufreq_get_policy(&new_policy, policy->cpu);
+        if (ret)
+                return -EINVAL;
+
+        ret = sscanf(buf, "%u", &new_policy.max);
+        if (ret != 1)
+                return -EINVAL;
+
+	// don't let mpdecision mess with max_freq
+	// TODO: make this configurable in the future via sysfs
+	if (!strcmp(current->comm,"mpdecision"))
+		return -EINVAL;
+
+	policy->user_policy.max = new_policy.max;
+	new_policy.user_policy.max = new_policy.max;
+
+	ret = cpufreq_driver->verify(&new_policy);
+        if (ret)
+                pr_err("cpufreq: Frequency verification failed\n");
+
+        ret = __cpufreq_set_policy(policy, &new_policy);
+
+	// restart thermal-engine when something else changes maxfreq
+        if (strcmp(current->comm, "thermal-engine")) {
+		struct task_struct *tsk;
+		for_each_process(tsk)
+		  if (!strcmp(tsk->comm,"thermal-engine")) send_sig(SIGKILL, tsk, 0);
+		pr_info("[imoseyon] thermal-engine restarting due to %s.\n", current->comm);
+	}
+
+        return ret ? ret : count;
+}
 
 /**
  * show_cpuinfo_cur_freq - current CPU frequency as detected by hardware
@@ -524,6 +572,9 @@ static ssize_t store_scaling_governor(struct cpufreq_policy *policy,
 	/* Do not use cpufreq_set_policy here or the user_policy.max
 	   will be wrongly overridden */
 	ret = __cpufreq_set_policy(policy, &new_policy);
+
+	// imoseyon - don't go above 2.27ghz when adding device
+	if (policy->max > 2265600) policy->max = 2265600;
 
 	policy->user_policy.policy = policy->policy;
 	policy->user_policy.governor = policy->governor;
@@ -1772,6 +1823,7 @@ static int __cpufreq_set_policy(struct cpufreq_policy *data,
 				struct cpufreq_policy *policy)
 {
 	int ret = 0;
+	struct cpufreq_policy *cpu0_policy = NULL;
 
 	pr_debug("setting new policy for CPU %u: %u - %u kHz\n", policy->cpu,
 		policy->min, policy->max);
@@ -1812,7 +1864,12 @@ static int __cpufreq_set_policy(struct cpufreq_policy *data,
 			CPUFREQ_NOTIFY, policy);
 
 	data->min = policy->min;
-	data->max = policy->max;
+	if (policy->cpu >= 1) {
+		cpu0_policy = __cpufreq_cpu_get(0,0);
+		data->max = cpu0_policy->max;
+	} else {
+		data->max = policy->max;
+	}
 
 	pr_debug("new min and max freqs are %u - %u kHz\n",
 					data->min, data->max);
@@ -1834,6 +1891,7 @@ static int __cpufreq_set_policy(struct cpufreq_policy *data,
 
 			/* start new governor */
 			data->governor = policy->governor;
+
 			if (__cpufreq_governor(data, CPUFREQ_GOV_START)) {
 				/* new governor failed, so re-start old one */
 				pr_debug("starting governor %s failed\n",
