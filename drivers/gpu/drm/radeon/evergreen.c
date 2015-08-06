@@ -1138,6 +1138,7 @@ void evergreen_mc_stop(struct radeon_device *rdev, struct evergreen_mc_save *sav
 	if (rdev->num_crtc >= 4) {
 		WREG32(EVERGREEN_CRTC_UPDATE_LOCK + EVERGREEN_CRTC2_REGISTER_OFFSET, 1);
 		WREG32(EVERGREEN_CRTC_UPDATE_LOCK + EVERGREEN_CRTC3_REGISTER_OFFSET, 1);
+		WREG32(EVERGREEN_CRTC_UPDATE_LOCK + crtc_offsets[i], 0);
 	}
 	if (rdev->num_crtc >= 6) {
 		WREG32(EVERGREEN_CRTC_UPDATE_LOCK + EVERGREEN_CRTC4_REGISTER_OFFSET, 1);
@@ -3418,6 +3419,9 @@ int evergreen_init(struct radeon_device *rdev)
 			return -EINVAL;
 		}
 	}
+
+	/* posting read */
+	RREG32(SRBM_STATUS);
 
 	return 0;
 }

@@ -67,7 +67,7 @@ static void moan_device(const char *str, struct pci_dev *dev)
 	       "Please send the output of lspci -vv, this\n"
 	       "message (0x%04x,0x%04x,0x%04x,0x%04x), the\n"
 	       "manufacturer and name of serial board or\n"
-	       "modem board to rmk+serial@arm.linux.org.uk.\n",
+	       "modem board to <linux-serial@vger.kernel.org>.\n",
 	       pci_name(dev), str, dev->vendor, dev->device,
 	       dev->subsystem_vendor, dev->subsystem_device);
 }
@@ -1077,6 +1077,18 @@ pci_omegapci_setup(struct serial_private *priv,
 	return setup_port(priv, port, 2, idx * 8, 0);
 }
 
+static int
+pci_brcm_trumanage_setup(struct serial_private *priv,
+			 const struct pciserial_board *board,
+			 struct uart_port *port, int idx)
+{
+	int ret = pci_default_setup(priv, board, port, idx);
+
+	port->type = PORT_BRCM_TRUMANAGE;
+	port->flags = (port->flags | UPF_FIXED_PORT | UPF_FIXED_TYPE);
+	return ret;
+}
+
 static int skip_tx_en_setup(struct serial_private *priv,
 			const struct pciserial_board *board,
 			struct uart_port *port, int idx)
@@ -1148,6 +1160,7 @@ pci_xr17c154_setup(struct serial_private *priv,
 #define PCIE_DEVICE_ID_NEO_2_OX_IBM	0x00F6
 #define PCI_DEVICE_ID_PLX_CRONYX_OMEGA	0xc001
 #define PCI_DEVICE_ID_INTEL_PATSBURG_KT 0x1d3d
+#define PCI_DEVICE_ID_INTEL_QRK_UART	0x0936
 
 /* Unknown vendors/cards - this should not be in linux/pci_ids.h */
 #define PCI_SUBDEVICE_ID_UNKNOWN_0x1584	0x1584
@@ -1660,6 +1673,13 @@ static struct pci_serial_quirk pci_serial_quirks[] __refdata = {
 		.init		= pci_eg20t_init,
 		.setup		= pci_default_setup,
 	},
+	{
+		.vendor		= PCI_VENDOR_ID_INTEL,
+		.device		= PCI_DEVICE_ID_INTEL_QRK_UART,
+		.subvendor	= PCI_ANY_ID,
+		.subdevice	= PCI_ANY_ID,
+		.setup		= pci_default_setup,
+	},
 	/*
 	 * Cronyx Omega PCI (PLX-chip based)
 	 */
@@ -1857,6 +1877,7 @@ enum pci_board_num_t {
 	pbn_ADDIDATA_PCIe_4_3906250,
 	pbn_ADDIDATA_PCIe_8_3906250,
 	pbn_ce4100_1_115200,
+	pbn_qrk,
 	pbn_omegapci,
 	pbn_NETMOS9900_2s_115200,
 };
@@ -2553,6 +2574,12 @@ static struct pciserial_board pci_boards[] __devinitdata = {
 		.num_ports	= 1,
 		.base_baud	= 921600,
 		.reg_shift      = 2,
+	},
+	[pbn_qrk] = {
+		.flags		= FL_BASE0,
+		.num_ports	= 1,
+		.base_baud	= 2764800,
+		.reg_shift	= 2,
 	},
 	[pbn_omegapci] = {
 		.flags		= FL_BASE0,
@@ -4108,6 +4135,12 @@ static struct pci_device_id serial_pci_tbl[] = {
 		PCI_ANY_ID,  PCI_ANY_ID, 0, 0,
 		pbn_ce4100_1_115200 },
 
+	/*
+	 * Intel Quark x1000
+	 */
+	{	PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_QRK_UART,
+		PCI_ANY_ID, PCI_ANY_ID, 0, 0,
+		pbn_qrk },
 	/*
 	 * Cronyx Omega PCI
 	 */
