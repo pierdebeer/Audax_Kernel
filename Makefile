@@ -1,7 +1,7 @@
 VERSION = 3
 PATCHLEVEL = 4
 SUBLEVEL = 108
-EXTRAVERSION = -Audax-Kernel-v2.5-pierdebeer
+EXTRAVERSION = -Audax-Kernel-v2.6-pierdebeer
 NAME = Saber-toothed Squirrel
 
 # *DOCUMENTATION*
